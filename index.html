@@ -6,7 +6,7 @@ body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relati
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>双双的时光小窝 ✿</title>
-<script src="https://cdn.goeasy.io/goeasy-2.13.24.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.3/dist/mqtt.min.js"></script>
 <style>
 :root {
   --peach: #FAD1C4; --blush: #F7CAC9; --rose: #E8A0A0;
@@ -604,7 +604,7 @@ setTimeout(updateTotalMemories,200);
 // ═══════════════════════════════
 // GALLERY
 // ═══════════════════════════════
-var galleryImages=[{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/1.jpg","caption":"晨光微曦"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/2.jpg","caption":"花开半夏"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/3.jpg","caption":"街角咖啡"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/4.jpg","caption":"海风轻拂"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/5.jpg","caption":"落日余晖"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/6.jpg","caption":"慵懒午后"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/7.jpg","caption":"雨后初晴"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/8.jpg","caption":"秋叶私语"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/9.jpg","caption":"城市微光"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/10.jpg","caption":"星河入梦"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/11.jpg","caption":"微风与你"},{"src":"https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/12.jpg","caption":"时光定格"}];
+var galleryImages=[{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a770f393fb.webp',caption:'晨光微曦'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a770f4b7f8.webp',caption:'花开半夏'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a771055fc5.webp',caption:'街角咖啡'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a7710b6d65.webp',caption:'海风轻拂'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a7710be1f1.webp',caption:'落日余晖'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a772196876.webp',caption:'慵懒午后'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a7727dabc2.webp',caption:'雨后初晴'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a77295266c.webp',caption:'秋叶私语'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a772999574.webp',caption:'城市微光'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a7729c201f.webp',caption:'星河入梦'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a773021770.webp',caption:'微风与你'},{src:'https://picui.ogmua.cn/s1/2026/06/23/6a3a870fe22f4.webp',caption:'时光定格'}];
 (function(){var grid=document.getElementById('galleryGrid');galleryImages.forEach(function(img,i){var item=document.createElement('div');item.className='gallery-item';item.innerHTML='<img src="'+img.src+'" alt="'+img.caption+'" loading="lazy"><div class="overlay"><span>'+img.caption+'</span></div>';item.onclick=function(){openGalleryLightbox(i)};grid.appendChild(item)})})();
 
 // ═══════════════════════════════
@@ -718,10 +718,11 @@ var fireflyMessages=['✨ 今天也是闪闪发光的一天 ✨','🌸 双双笑
 setInterval(function(){document.getElementById('fireflyMessage').textContent=fireflyMessages[Math.floor(Math.random()*fireflyMessages.length)]},8000);
 
 // ═══════════════════════════════
-// REAL-TIME SYNC (GoEasy)
+// REAL-TIME SYNC (MQTT)
 // ═══════════════════════════════
 var _syncing = false;
-var _goEasy = null;
+var _mqttClient = null;
+var _mqttConnected = false;
 
 function showSyncStatus(status) {
   var dot = document.getElementById('syncStatus');
@@ -731,65 +732,20 @@ function showSyncStatus(status) {
 }
 
 function syncPublish(type, data) {
-  if (_syncing || !_goEasy) return;
+  if (!_mqttConnected || _syncing) return;
   var version = Date.now();
   localStorage.setItem('sstw_' + type + '_ver', version);
   var msg = JSON.stringify({ type: type, data: data, version: version });
-  try {
-    _goEasy.pubsub.publish({
-      channel: 'sstw_sync',
-      message: msg,
-      onFailed: function(err) { console.warn('同步发送失败(' + type + '):', err); }
-    });
-  } catch(e) { console.warn('同步发送异常(' + type + '):', e); }
+  try { _mqttClient.publish('sstw/sync', msg, { qos: 0 }); }
+  catch(e) { console.warn('同步发送异常(' + type + '):', e); }
 }
 
 function syncPublishAll() {
-  if (_syncing || !_goEasy) return;
-  // Only publish non-empty data (prevent blank overwrite)
+  if (!_mqttConnected || _syncing) return;
   try { var m = getMoments(); if (m.length) syncPublish('moments', m); } catch(e) {}
   try { var n = getNotes(); if (n.length) syncPublish('notes', n); } catch(e) {}
   var avatar = localStorage.getItem('shuangshuang_avatar');
   if (avatar) { try { syncPublish('avatar', avatar); } catch(e) {} }
-}
-
-function handleSyncMessage(message) {
-  try {
-    var msg = JSON.parse(message.content);
-
-    // Handle sync request: respond with our data
-    if (msg.type === '_request') {
-      syncPublishAll();
-      return;
-    }
-
-    var localVer = parseInt(localStorage.getItem('sstw_' + msg.type + '_ver') || '0');
-    if (msg.version <= localVer) return;
-
-    _syncing = true;
-
-    switch (msg.type) {
-      case 'moments':
-        localStorage.setItem('shuangshuang_moments', JSON.stringify(msg.data));
-        localStorage.setItem('sstw_moments_ver', msg.version);
-        renderMoments();
-        updateTotalMemories();
-        break;
-      case 'notes':
-        localStorage.setItem('shuangshuang_notes', JSON.stringify(msg.data));
-        localStorage.setItem('sstw_notes_ver', msg.version);
-        renderNoteDisplay();
-        updateTotalMemories();
-        break;
-      case 'avatar':
-        localStorage.setItem('shuangshuang_avatar', msg.data);
-        localStorage.setItem('sstw_avatar_ver', msg.version);
-        updateAllAvatars(msg.data);
-        break;
-    }
-
-    _syncing = false;
-  } catch(e) { _syncing = false; console.error('接收同步消息出错:', e); }
 }
 
 function hasLocalData() {
@@ -799,53 +755,67 @@ function hasLocalData() {
   return false;
 }
 
-function initGoEasy() {
-  if (typeof GoEasy === 'undefined') {
-    console.warn('GoEasy SDK 未加载，实时同步不可用');
+function initMQTT() {
+  if (typeof mqtt === 'undefined') {
+    console.warn('MQTT SDK 未加载');
     showSyncStatus('disconnected');
     return;
   }
   try {
-    _goEasy = GoEasy.getInstance({
-      host: 'hangzhou.goeasy.io',
-      appkey: 'BC-93fe6eefe27b48ab8504a3e5379c9831',
-      modules: ['pubsub']
+    showSyncStatus('connecting');
+    _mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+      clientId: 'sstw_' + Math.random().toString(36).substring(2, 10),
+      clean: true,
+      connectTimeout: 10000,
+      reconnectPeriod: 5000
     });
-    _goEasy.connect({
-      onSuccess: function() {
-        showSyncStatus('connected');
-        _goEasy.pubsub.subscribe({
-          channel: 'sstw_sync',
-          onMessage: handleSyncMessage,
-          onSuccess: function() {
-            console.log('📡 已订阅实时同步频道');
-            if (hasLocalData()) {
-              // 已有本地数据，分享给其他人
-              setTimeout(syncPublishAll, 1500);
-            } else {
-              // 新用户，请求对方同步数据
-              setTimeout(function() {
-                try {
-                  _goEasy.pubsub.publish({
-                    channel: 'sstw_sync',
-                    message: JSON.stringify({ type: '_request', version: Date.now() })
-                  });
-                } catch(e) {}
-              }, 1500);
-            }
-          },
-          onFailed: function(err) { console.error('订阅同步频道失败:', err); }
-        });
-      },
-      onFailed: function(err) {
-        showSyncStatus('disconnected');
-        console.error('GoEasy 连接失败:', err);
-        // 5秒后重试
-        setTimeout(initGoEasy, 5000);
-      }
+
+    _mqttClient.on('connect', function() {
+      _mqttConnected = true;
+      showSyncStatus('connected');
+      _mqttClient.subscribe('sstw/sync', { qos: 0 }, function(err) {
+        if (err) { console.error('订阅失败:', err); return; }
+        setTimeout(function() {
+          if (hasLocalData()) { syncPublishAll(); }
+          else { try { _mqttClient.publish('sstw/sync', JSON.stringify({ type: '_request', version: Date.now() }), { qos: 0 }); } catch(e) {} }
+        }, 2000);
+      });
     });
+
+    _mqttClient.on('message', function(topic, payload) {
+      try {
+        var msg = JSON.parse(payload.toString());
+        if (msg.type === '_request') { syncPublishAll(); return; }
+        var localVer = parseInt(localStorage.getItem('sstw_' + msg.type + '_ver') || '0');
+        if (msg.version <= localVer) return;
+        _syncing = true;
+        switch (msg.type) {
+          case 'moments':
+            localStorage.setItem('shuangshuang_moments', JSON.stringify(msg.data));
+            localStorage.setItem('sstw_moments_ver', msg.version);
+            renderMoments(); updateTotalMemories();
+            break;
+          case 'notes':
+            localStorage.setItem('shuangshuang_notes', JSON.stringify(msg.data));
+            localStorage.setItem('sstw_notes_ver', msg.version);
+            renderNoteDisplay(); updateTotalMemories();
+            break;
+          case 'avatar':
+            localStorage.setItem('shuangshuang_avatar', msg.data);
+            localStorage.setItem('sstw_avatar_ver', msg.version);
+            updateAllAvatars(msg.data);
+            break;
+        }
+        _syncing = false;
+      } catch(e) { _syncing = false; console.error('接收同步消息出错:', e); }
+    });
+
+    _mqttClient.on('error', function(err) { console.error('MQTT 错误:', err); showSyncStatus('disconnected'); });
+    _mqttClient.on('close', function() { _mqttConnected = false; showSyncStatus('disconnected'); });
+    _mqttClient.on('offline', function() { _mqttConnected = false; showSyncStatus('disconnected'); });
+
   } catch(e) {
-    console.error('GoEasy 初始化失败:', e);
+    console.error('MQTT 初始化失败:', e);
     showSyncStatus('disconnected');
   }
 }
@@ -856,7 +826,7 @@ function initGoEasy() {
 loadAvatar();
 setTimeout(updateTotalMemories,500);
 // 启动实时同步（延迟等 DOM 和 GoEasy SDK 就绪）
-setTimeout(initGoEasy, 800);
+setTimeout(initMQTT, 800);
 console.log('✨ 双双的时光小窝 ✿ v4.0 已就绪 — 支持实时同步！');
 console.log('💡 点击首页大头像即可上传自己的头像照片，全站同步！');
 </script>
