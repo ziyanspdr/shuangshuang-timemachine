@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>✨ 3D 智能办公室</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #1a1a2e; font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+
+#canvas-container { width: 100vw; height: 100vh; display: block; }
+
+/* 顶部状态栏 */
+.status-bar {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.12); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
+  padding: 8px 24px; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+  color: white; font-size: 0.85rem; letter-spacing: 1px;
+}
+.status-bar .status-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #4CAF50; animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(76,175,80,0.4); } 50% { box-shadow: 0 0 0 8px rgba(76,175,80,0); } }
+.status-bar .status-text { color: rgba(255,255,255,0.7); }
+
+/* 底部控制面板 */
+.control-panel {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.10); backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+  padding: 18px 24px; z-index: 10; width: min(650px, 92vw);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.control-panel .input-row {
+  display: flex; gap: 10px;
+}
+.control-panel input {
+  flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 12px 16px; color: white; font-size: 0.95rem;
+  outline: none; transition: all 0.3s;
+}
+.control-panel input::placeholder { color: rgba(255,255,255,0.3); }
+.control-panel input:focus { border-color: rgba(255,200,150,0.5); background: rgba(255,255,255,0.12); }
+.control-panel .submit-btn {
+  background: linear-gradient(135deg, #f5a97f, #f7c59f); border: none;
+  border-radius: 12px; padding: 0 20px; color: #1a1a2e; font-weight: bold;
+  cursor: pointer; font-size: 0.9rem; transition: all 0.3s; white-space: nowrap;
+}
+.control-panel .submit-btn:hover { transform: scale(1.04); filter: brightness(1.1); }
+.control-panel .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.control-panel .templates {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.control-panel .template-btn {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 6px 14px; color: rgba(255,255,255,0.7); font-size: 0.8rem;
+  cursor: pointer; transition: all 0.3s;
+}
+.control-panel .template-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+.control-panel .template-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 黑板 overlay - 3D 场景中的黑板文字位置 */
+.blackboard-overlay {
+  position: fixed; pointer-events: none; z-index: 5;
+  /* 位置在 3D 场景中通过 JS 更新 */
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- 状态栏 -->
+<div class="status-bar">
+  <span class="status-dot"></span>
+  <span class="status-text" id="statusText">🤖 等待任务中...</span>
+</div>
+
+<!-- 控制面板 -->
+<div class="control-panel">
+  <div class="input-row">
+    <input id="taskInput" placeholder="给 AI 下达任务，比如：帮我规划明天的日程..." maxlength="100">
+    <button class="submit-btn" id="submitBtn">🚀 下达</button>
+  </div>
+  <div class="templates" id="templateList"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ═══════════════════════════════════════
+// TASK TEMPLATES
+// ═══════════════════════════════════════
+const TASK_TEMPLATES = [
+  {
+    title: '🎂 生日派对策划',
+    steps: [
+      { text: '📅 确认日期与天气预报', duration: 1200 },
+      { text: '📍 挑选合适的场地', duration: 1500 },
+      { text: '🎈 确定邀请名单', duration: 1200 },
+      { text: '🍰 预订蛋糕与餐饮', duration: 1800 },
+      { text: '🎁 准备惊喜礼物', duration: 1500 },
+      { text: '📋 制定当日时间表', duration: 2000 },
+    ]
+  },
+  {
+    title: '✈️ 旅行规划',
+    steps: [
+      { text: '🗺️ 确定目的地与天数', duration: 1500 },
+      { text: '🌤️ 查询当地天气与季节', duration: 1200 },
+      { text: '🏨 预订交通与住宿', duration: 2000 },
+      { text: '📸 必打卡景点清单', duration: 1800 },
+      { text: '🍜 美食攻略整理', duration: 1500 },
+      { text: '🧳 打包清单与注意事项', duration: 1800 },
+    ]
+  },
+  {
+    title: '📚 学习计划',
+    steps: [
+      { text: '🎯 明确学习目标与周期', duration: 1500 },
+      { text: '📖 收集学习资料', duration: 2000 },
+      { text: '📝 拆解每日任务', duration: 1800 },
+      { text: '⏰ 制定时间表', duration: 1500 },
+      { text: '✅ 设置阶段检查点', duration: 1200 },
+      { text: '📊 输出学习路线图', duration: 2000 },
+    ]
+  },
+  {
+    title: '🛒 购物清单',
+    steps: [
+      { text: '📋 列出所有需求', duration: 1500 },
+      { text: '💵 设定预算范围', duration: 1200 },
+      { text: '🔍 对比品牌与性价比', duration: 2000 },
+      { text: '🛍️ 选择购买渠道', duration: 1500 },
+      { text: '🧾 生成最终购物清单', duration: 1500 },
+    ]
+  },
+  {
+    title: '💼 工作日报',
+    steps: [
+      { text: '📝 回顾今日完成事项', duration: 1500 },
+      { text: '📊 总结关键进展', duration: 1800 },
+      { text: '⚠️ 记录遇到的问题', duration: 1500 },
+      { text: '🎯 规划明日计划', duration: 1800 },
+      { text: '📋 生成日报并归档', duration: 1500 },
+    ]
+  },
+  {
+    title: '🎨 创意项目',
+    steps: [
+      { text: '💡 头脑风暴创意点子', duration: 2000 },
+      { text: '📐 确定设计方向', duration: 1500 },
+      { text: '🎨 选择配色与风格', duration: 1800 },
+      { text: '✏️ 绘制草图方案', duration: 2000 },
+      { text: '🖌️ 输出完整方案', duration: 1500 },
+    ]
+  }
+];
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE SETUP
+// ═══════════════════════════════════════
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf0ebe3);
+scene.fog = new THREE.Fog(0xf0ebe3, 25, 45);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(8, 6, 10);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+container.appendChild(renderer.domElement);
+
+// CSS2 Renderer for labels
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.8, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 5;
+controls.maxDistance = 25;
+controls.maxPolarAngle = Math.PI / 2.1;
+controls.update();
+
+// ═══════════════════════════════════════
+// LIGHTING
+// ═══════════════════════════════════════
+const ambientLight = new THREE.AmbientLight(0xffeedd, 0.4);
+scene.add(ambientLight);
+
+const hemiLight = new THREE.HemisphereLight(0xffeedd, 0x8ba5a0, 0.6);
+scene.add(hemiLight);
+
+const mainLight = new THREE.DirectionalLight(0xfff4e6, 1.8);
+mainLight.position.set(10, 15, 8);
+mainLight.castShadow = true;
+mainLight.shadow.mapSize.width = 2048;
+mainLight.shadow.mapSize.height = 2048;
+mainLight.shadow.camera.near = 0.1;
+mainLight.shadow.camera.far = 30;
+mainLight.shadow.camera.left = -12;
+mainLight.shadow.camera.right = 12;
+mainLight.shadow.camera.top = 12;
+mainLight.shadow.camera.bottom = -12;
+scene.add(mainLight);
+
+const fillLight = new THREE.DirectionalLight(0x8ecae6, 0.3);
+fillLight.position.set(-8, 6, -5);
+scene.add(fillLight);
+
+const warmLight = new THREE.PointLight(0xff9944, 0.5, 10);
+warmLight.position.set(2.5, 2.8, -2.5);
+scene.add(warmLight);
+
+// ═══════════════════════════════════════
+// BUILD OFFICE
+// ═══════════════════════════════════════
+function buildOffice() {
+  const group = new THREE.Group();
+
+  // Floor
+  const floorGeo = new THREE.PlaneGeometry(14, 10);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0xc4b59a, roughness: 0.8, metalness: 0
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, -0.01, 0);
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  // Floor grid lines
+  for (let x = -6.5; x <= 6.5; x += 1.5) {
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xb8a88a, transparent: true, opacity: 0.2 });
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(x, 0.005, -4.8), new THREE.Vector3(x, 0.005, 4.8)
+    ]);
+    group.add(new THREE.Line(geo, lineMat));
+  }
+  for (let z = -4.5; z <= 4.5; z += 1.5) {
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xb8a88a, transparent: true, opacity: 0.2 });
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-6.8, 0.005, z), new THREE.Vector3(6.8, 0.005, z)
+    ]);
+    group.add(new THREE.Line(geo, lineMat));
+  }
+
+  // Back wall
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5efe6, roughness: 0.9 });
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(14, 5), wallMat);
+  backWall.position.set(0, 2.5, -5);
+  group.add(backWall);
+
+  // Left wall
+  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), wallMat);
+  leftWall.position.set(-7, 2.5, 0);
+  leftWall.rotation.y = Math.PI / 2;
+  group.add(leftWall);
+
+  // Right wall
+  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), wallMat);
+  rightWall.position.set(7, 2.5, 0);
+  rightWall.rotation.y = -Math.PI / 2;
+  group.add(rightWall);
+
+  // Baseboards
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0xd4c5b0, roughness: 0.7 });
+  [-5, 5].forEach(z => {
+    const bb = new THREE.Mesh(new THREE.BoxGeometry(14, 0.12, 0.06), baseMat);
+    bb.position.set(0, 0.06, z);
+    group.add(bb);
+  });
+  [-7, 7].forEach(x => {
+    const bb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 10), baseMat);
+    bb.position.set(x, 0.06, 0);
+    group.add(bb);
+  });
+
+  // Window on right wall
+  const windowMat = new THREE.MeshStandardMaterial({
+    color: 0xc8dce8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.4
+  });
+  const windowFrameMat = new THREE.MeshStandardMaterial({ color: 0xd4c5b0, roughness: 0.7 });
+
+  for (let i = -1; i <= 1; i++) {
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.08), windowFrameMat);
+    frame.position.set(7.02, 2.2, i * 2.5);
+    group.add(frame);
+
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 2.0), windowMat);
+    pane.position.set(7.02, 2.2, i * 2.5);
+    group.add(pane);
+  }
+
+  // Warm light glow from window
+  const winGlow = new THREE.PointLight(0xffeedd, 0.3, 6);
+  winGlow.position.set(7, 2.2, 0);
+  group.add(winGlow);
+
+  // Ceiling lights
+  for (let i = -2; i <= 2; i += 2) {
+    const lightCyl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.08, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xffeecc, emissiveIntensity: 0.3 })
+    );
+    lightCyl.position.set(i * 1.2, 4.88, 0);
+    group.add(lightCyl);
+  }
+
+  // Lamp on desk (later)
+  // Rug
+  const rugMat = new THREE.MeshStandardMaterial({ color: 0xddc8b8, roughness: 0.9 });
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(1.8, 24), rugMat);
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(0, 0.005, 2);
+  group.add(rug);
+
+  // DESK
+  const deskMat = new THREE.MeshStandardMaterial({ color: 0xb89a7a, roughness: 0.6 });
+  const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 1.0), deskMat);
+  deskTop.position.set(0, 0.72, 3);
+  deskTop.castShadow = true;
+  deskTop.receiveShadow = true;
+  group.add(deskTop);
+
+  const legMat = new THREE.MeshStandardMaterial({ color: 0xa08870, roughness: 0.6 });
+  [[-1.0, 0.36, 3.35], [1.0, 0.36, 3.35], [-1.0, 0.36, 2.65], [1.0, 0.36, 2.65]].forEach(pos => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.7), legMat);
+    leg.position.set(pos[0], pos[1], pos[2]);
+    group.add(leg);
+  });
+
+  // Items on desk
+  // Monitor
+  const monStand = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.06), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+  monStand.position.set(-0.3, 0.78, 3.35);
+  group.add(monStand);
+  const monScreen = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.03), new THREE.MeshStandardMaterial({ color: 0x111122, emissive: 0x2244aa, emissiveIntensity: 0.1 }));
+  monScreen.position.set(-0.3, 0.93, 3.4);
+  group.add(monScreen);
+  // Keyboard
+  const kb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.2), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+  kb.position.set(0.1, 0.76, 3.45);
+  group.add(kb);
+  // Coffee mug
+  const mugMat = new THREE.MeshStandardMaterial({ color: 0xe8d5c0, roughness: 0.5 });
+  const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.15), mugMat);
+  mug.position.set(0.7, 0.80, 3.35);
+  group.add(mug);
+
+  // CHAIR
+  const chairMat = new THREE.MeshStandardMaterial({ color: 0x7a6b5d, roughness: 0.7 });
+  const chairSeat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.7), chairMat);
+  chairSeat.position.set(0, 0.42, 2.2);
+  chairSeat.castShadow = true;
+  group.add(chairSeat);
+  const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.04), chairMat);
+  chairBack.position.set(0, 0.68, 1.87);
+  group.add(chairBack);
+  // Chair legs
+  [[-0.3, 0.2, 2.45], [0.3, 0.2, 2.45], [-0.3, 0.2, 1.95], [0.3, 0.2, 1.95]].forEach(pos => {
+    const cl = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.38), new THREE.MeshStandardMaterial({ color: 0x555555 }));
+    cl.position.set(pos[0], pos[1], pos[2]);
+    group.add(cl);
+  });
+
+  // BOOKSHELF
+  const shelfMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.6 });
+  const shelfSideMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.6 });
+
+  // Left bookshelf
+  const lshelf = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.0, 0.8), shelfSideMat);
+  lshelf.position.set(-5.5, 1.0, -2.5);
+  group.add(lshelf);
+  const rshelf = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.0, 0.8), shelfSideMat);
+  rshelf.position.set(-4.3, 1.0, -2.5);
+  group.add(rshelf);
+  // Shelves
+  [0.2, 0.8, 1.4, 2.0].forEach(h => {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.03, 0.8), shelfMat);
+    s.position.set(-4.9, h, -2.5);
+    group.add(s);
+  });
+
+  // Books on shelves
+  const bookColors = [0xc0392b, 0x2980b9, 0x27ae60, 0x8e44ad, 0xd35400, 0x1abc9c, 0xe74c3c, 0x3498db];
+  [[0.3,-4.8], [0.3,-4.9], [0.5,-5.0], [0.8,-5.1]].forEach(pos => {
+    // Just a few decorative books
+    const bMat = new THREE.MeshStandardMaterial({ color: bookColors[Math.floor(Math.random() * bookColors.length)] });
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.25 + Math.random() * 0.15, 0.15), bMat);
+    book.position.set(-4.9, pos[0] + 0.15, -2.9);
+    group.add(book);
+  });
+
+  // PLANT
+  const potMat = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.7 });
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.25), potMat);
+  pot.position.set(-3.5, 0.13, -4.0);
+  group.add(pot);
+  const soilMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a });
+  const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04), soilMat);
+  soil.position.set(-3.5, 0.27, -4.0);
+  group.add(soil);
+  // Leaves
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4a8a3a });
+  for (let i = 0; i < 5; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), leafMat);
+    leaf.position.set(-3.5 + (Math.random() - 0.5) * 0.3, 0.35 + Math.random() * 0.2, -4.0 + (Math.random() - 0.5) * 0.3);
+    leaf.scale.y = 1.5;
+    group.add(leaf);
+  }
+
+  return group;
+}
+
+const office = buildOffice();
+scene.add(office);
+
+// ═══════════════════════════════════════
+// BLACKBOARD
+// ═══════════════════════════════════════
+// Blackboard texture
+const boardCanvas = document.createElement('canvas');
+boardCanvas.width = 512;
+boardCanvas.height = 384;
+const ctx = boardCanvas.getContext('2d');
+
+function drawBoard(boardItems, highlightIdx = -1, progress = 0) {
+  ctx.fillStyle = '#2d4a3e';
+  ctx.fillRect(0, 0, 512, 384);
+
+  // Board border
+  ctx.strokeStyle = '#8a7a5a';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 10, 492, 364);
+
+  // Inner shadow
+  ctx.fillStyle = '#1a3828';
+  ctx.fillRect(16, 16, 480, 352);
+
+  // Chalk dust texture
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.beginPath();
+    ctx.arc(Math.random() * 512, Math.random() * 384, Math.random() * 3 + 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px "Segoe UI", "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('📋 任 务 看 板', 256, 48);
+
+  // Separator
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(60, 62);
+  ctx.lineTo(452, 62);
+  ctx.stroke();
+
+  if (boardItems.length === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '22px "Segoe UI", "PingFang SC", sans-serif';
+    ctx.fillText('💤 暂无任务', 256, 200);
+    ctx.font = '16px "Segoe UI", "PingFang SC", sans-serif';
+    ctx.fillText('在下方输入框下达任务～', 256, 240);
+    return;
+  }
+
+  // Task title
+  ctx.fillStyle = '#f5d742';
+  ctx.font = 'bold 20px "Segoe UI", "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(boardItems[0].title || '当前任务', 256, 90);
+
+  // Steps
+  const items = boardItems[0].steps || boardItems.slice(1);
+  const startY = 120;
+  const lineH = 36;
+  const maxShow = 6;
+
+  items.slice(0, maxShow).forEach((item, i) => {
+    const y = startY + i * lineH;
+    const isCurrent = i === highlightIdx;
+    const isDone = i < highlightIdx;
+
+    if (isDone) {
+      ctx.fillStyle = 'rgba(160,220,160,0.6)';
+      ctx.font = '16px "Segoe UI", "PingFang SC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('✅', 50, y);
+      ctx.fillText(item.text, 80, y);
+    } else if (isCurrent) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px "Segoe UI", "PingFang SC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('⏳', 50, y);
+      ctx.fillText(item.text, 80, y);
+      // Blinking cursor
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(80 + ctx.measureText(item.text).width + 4, y - 14, 8, 2);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '15px "Segoe UI", "PingFang SC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('⬜', 50, y);
+      ctx.fillText(item.text, 80, y);
+    }
+  });
+
+  // Progress bar
+  const totalSteps = items.length;
+  const doneCount = Math.min(highlightIdx + 1, totalSteps);
+  const pct = totalSteps > 0 ? doneCount / totalSteps : 0;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(80, startY + maxShow * lineH + 10, 352, 10);
+  ctx.fillStyle = pct >= 1 ? '#4CAF50' : '#f5d742';
+  ctx.fillRect(80, startY + maxShow * lineH + 10, 352 * pct, 10);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '14px "Segoe UI", "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${doneCount}/${totalSteps}`, 256, startY + maxShow * lineH + 36);
+}
+
+// Create 3D blackboard mesh
+const boardTexture = new THREE.CanvasTexture(boardCanvas);
+const boardMat = new THREE.MeshStandardMaterial({
+  map: boardTexture,
+  roughness: 0.7,
+  metalness: 0.05
+});
+const board = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.4), boardMat);
+board.position.set(0, 2.0, -4.99);
+board.castShadow = true;
+scene.add(board);
+
+// Blackboard frame
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.6 });
+const frameThick = 0.06;
+const fw = 3.3, fh = 2.5;
+// Top/bottom
+[-1, 1].forEach(s => {
+  const fb = new THREE.Mesh(new THREE.BoxGeometry(fw + 0.08, frameThick, 0.06), frameMat);
+  fb.position.set(0, s * (fh / 2) + (fw > fh ? 0 : 0), -4.97);
+  scene.add(fb);
+});
+[-1, 1].forEach(s => {
+  const fb = new THREE.Mesh(new THREE.BoxGeometry(frameThick, fh, 0.06), frameMat);
+  fb.position.set(s * (fw / 2), 0, -4.97);
+  scene.add(fb);
+});
+
+// Chalk tray
+const tray = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.04, 0.12), new THREE.MeshStandardMaterial({ color: 0x6a5a4a }));
+tray.position.set(0, -1.28, -4.95);
+scene.add(tray);
+
+// ═══════════════════════════════════════
+// CHARACTER
+// ═══════════════════════════════════════
+const character = new THREE.Group();
+
+const skinColor = 0xf5d0b8;
+const bodyColor = 0x5a8ab5;
+const darkAccent = 0x3a6a95;
+
+// Body
+const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 });
+const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 0.7, 12), bodyMat);
+body.position.y = 0.35;
+body.castShadow = true;
+character.add(body);
+
+// Shirt detail (collar)
+const collarMat = new THREE.MeshStandardMaterial({ color: 0x4a7aa5 });
+const collar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.1), collarMat);
+collar.position.set(0, 0.7, -0.15);
+character.add(collar);
+
+// Head
+const headMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.4 });
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), headMat);
+head.position.y = 0.78;
+head.castShadow = true;
+character.add(head);
+
+// Hair
+const hairMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.8 });
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), hairMat);
+hair.position.set(0, 0.92, 0.08);
+hair.scale.set(1.1, 0.35, 1.0);
+character.add(hair);
+
+// Eyes
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+[-0.08, 0.08].forEach(x => {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), eyeMat);
+  eye.position.set(x, 0.78, 0.2);
+  character.add(eye);
+
+  // Eye shine
+  const shineMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const shine = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 6), shineMat);
+  shine.position.set(x + 0.02, 0.79, 0.22);
+  character.add(shine);
+});
+
+// Cheeks (blush)
+const blushMat = new THREE.MeshStandardMaterial({ color: 0xf0a0a0, transparent: true, opacity: 0.3 });
+[-0.12, 0.12].forEach(x => {
+  const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), blushMat);
+  cheek.position.set(x, 0.73, 0.2);
+  character.add(cheek);
+});
+
+// Smile (always happy)
+const smileMat = new THREE.MeshStandardMaterial({ color: 0xcc8877 });
+const smile = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 12, Math.PI), smileMat);
+smile.position.set(0, 0.73, 0.22);
+smile.rotation.x = Math.PI / 2;
+smile.rotation.z = 0.1;
+character.add(smile);
+
+// Arms
+const armMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.4 });
+const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.5, 8), armMat);
+leftArm.position.set(-0.3, 0.5, 0);
+leftArm.rotation.z = 0.2;
+leftArm.castShadow = true;
+character.add(leftArm);
+
+const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.5, 8), armMat);
+rightArm.position.set(0.3, 0.5, 0);
+rightArm.rotation.z = -0.2;
+rightArm.castShadow = true;
+character.add(rightArm);
+
+// Legs
+const legMat = new THREE.MeshStandardMaterial({ color: 0x3a3a5a, roughness: 0.6 });
+[-0.1, 0.1].forEach(x => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.3, 8), legMat);
+  leg.position.set(x, 0.15, 0);
+  character.add(leg);
+});
+
+// Shadow indicator
+const shadowMat = new THREE.MeshStandardMaterial({
+  color: 0x000000, transparent: true, opacity: 0.08
+});
+const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.35, 12), shadowMat);
+shadow.rotation.x = -Math.PI / 2;
+shadow.position.y = 0.005;
+character.add(shadow);
+
+// Position character
+character.position.set(0, 0, 1.5);
+scene.add(character);
+
+// Animation state
+const animState = {
+  currentAction: 'idle',
+  timer: 0,
+  walkTarget: null,
+  startPos: null,
+  progress: 0,
+  bobPhase: 0,
+};
+
+// ═══════════════════════════════════════
+// TASK SYSTEM
+// ═══════════════════════════════════════
+let currentTask = null;
+let isExecuting = false;
+let currentStep = -1;
+let stepTimer = 0;
+let currentSteps = [];
+let taskTitle = '';
+let boardItems = [];
+
+function updateBlackboard(highlight) {
+  drawBoard(boardItems, highlight, 0);
+  boardTexture.needsUpdate = true;
+}
+
+function executeTask(taskTitle, steps) {
+  if (isExecuting) return;
+  isExecuting = true;
+  currentStep = -1;
+  currentSteps = [...steps];
+  taskTitle = taskTitle;
+
+  boardItems = [{ title: taskTitle, steps: steps }];
+  updateBlackboard(-1);
+
+  updateStatus('🧠 思考中...');
+  document.getElementById('submitBtn').disabled = true;
+  document.querySelectorAll('.template-btn').forEach(b => b.disabled = true);
+
+  // Walk to blackboard
+  walkCharacter(new THREE.Vector3(0, 0, -2.5), () => {
+    updateStatus('📝 正在拆解任务...');
+    // Start step-by-step
+    nextStep();
+  });
+}
+
+function nextStep() {
+  currentStep++;
+  if (currentStep >= currentSteps.length) {
+    finishTask();
+    return;
+  }
+
+  const step = currentSteps[currentStep];
+  updateBlackboard(currentStep);
+  updateStatus(`⏳ ${step.text}`);
+
+  // "Write" on blackboard animation
+  setTimeout(() => {
+    nextStep();
+  }, step.duration);
+}
+
+function finishTask() {
+  updateBlackboard(currentSteps.length);
+  updateStatus('🎉 任务全部完成！');
+
+  // Celebrate animation
+  celebrate();
+
+  setTimeout(() => {
+    // Walk back to desk
+    walkCharacter(new THREE.Vector3(0, 0, 1.5), () => {
+      isExecuting = false;
+      document.getElementById('submitBtn').disabled = false;
+      document.querySelectorAll('.template-btn').forEach(b => b.disabled = false);
+      updateStatus('🤖 等待任务中...');
+    });
+  }, 1500);
+}
+
+// ═══════════════════════════════════════
+// CHARACTER ANIMATION
+// ═══════════════════════════════════════
+let animQueue = [];
+let isWalking = false;
+let walkCallback = null;
+let celebrateTimer = 0;
+let isCelebrating = false;
+
+function walkCharacter(target, callback) {
+  animState.walkTarget = target.clone();
+  animState.startPos = character.position.clone();
+  animState.progress = 0;
+  isWalking = true;
+  walkCallback = callback;
+  updateStatus('🚶 走向黑板...');
+}
+
+function celebrate() {
+  isCelebrating = true;
+  celebrateTimer = 0;
+  updateStatus('🎉 任务完成！');
+}
+
+function updateCharacterAnimations(delta) {
+  animState.bobPhase += delta * 6;
+
+  if (isCelebrating) {
+    celebrateTimer += delta;
+    // Jumping/celebrating
+    character.position.y = Math.abs(Math.sin(celebrateTimer * 4)) * 0.2;
+    character.rotation.y = Math.sin(celebrateTimer * 3) * 0.3;
+
+    if (celebrateTimer > 2) {
+      isCelebrating = false;
+      character.position.y = 0;
+      character.rotation.y = 0;
+    }
+    return;
+  }
+
+  if (isWalking && animState.walkTarget) {
+    animState.progress += delta * 0.6;
+    if (animState.progress >= 1) {
+      animState.progress = 1;
+      isWalking = false;
+      character.position.copy(animState.walkTarget);
+      character.rotation.y = 0;
+      if (walkCallback) walkCallback();
+      return;
+    }
+
+    // Smooth interpolation
+    const t = animState.progress;
+    const smoothT = t * t * (3 - 2 * t); // smoothstep
+    character.position.lerpVectors(animState.startPos, animState.walkTarget, smoothT);
+
+    // Slight bob
+    character.position.y = Math.sin(animState.bobPhase) * 0.04;
+
+    // Face walking direction
+    const dir = new THREE.Vector3().copy(animState.walkTarget).sub(animState.startPos);
+    if (dir.length() > 0.01) {
+      character.rotation.y = Math.atan2(dir.x, dir.z);
+    }
+
+    // Arm swing
+    leftArm.rotation.x = Math.sin(animState.bobPhase) * 0.3;
+    rightArm.rotation.x = Math.sin(animState.bobPhase + Math.PI) * 0.3;
+
+    return;
+  }
+
+  // Idle
+  character.position.y = Math.sin(animState.bobPhase * 0.5) * 0.01;
+
+  // Idle arm position
+  leftArm.rotation.x = Math.sin(animState.bobPhase * 0.3) * 0.02;
+  rightArm.rotation.x = Math.cos(animState.bobPhase * 0.3) * 0.02;
+
+  // Subtle head tilt
+  head.rotation.z = Math.sin(animState.bobPhase * 0.2) * 0.02;
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function updateStatus(text) {
+  document.getElementById('statusText').textContent = text;
+}
+
+// Initialize templates
+const templateList = document.getElementById('templateList');
+TASK_TEMPLATES.forEach((tpl, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'template-btn';
+  btn.textContent = tpl.title;
+  btn.onclick = () => {
+    if (!isExecuting) {
+      document.getElementById('taskInput').value = tpl.title;
+      executeTask(tpl.title, tpl.steps);
+    }
+  };
+  templateList.appendChild(btn);
+});
+
+// Submit handler
+document.getElementById('submitBtn').addEventListener('click', () => {
+  const input = document.getElementById('taskInput').value.trim();
+  if (!input || isExecuting) return;
+
+  // Find matching template or use generic
+  const match = TASK_TEMPLATES.find(t => t.title.includes(input) || input.includes(t.title));
+  if (match) {
+    executeTask(match.title, match.steps);
+  } else {
+    // Generate generic steps
+    const genericSteps = [
+      { text: '📥 接收任务：「' + input.substring(0, 20) + '」', duration: 1500 },
+      { text: '🔍 分析任务需求', duration: 2000 },
+      { text: '📝 拆解关键步骤', duration: 2000 },
+      { text: '⚙️ 逐步执行方案', duration: 2500 },
+      { text: '✅ 任务执行完成', duration: 1500 },
+    ];
+    executeTask('📋 ' + input.substring(0, 15) + '...', genericSteps);
+  }
+});
+
+// Enter key
+document.getElementById('taskInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('submitBtn').click();
+});
+
+// ═══════════════════════════════════════
+// DECORATIVE ELEMENTS
+// ═══════════════════════════════════════
+// Small sparkles around the room
+const sparkleMat = new THREE.SpriteMaterial({
+  map: (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const cx = c.getContext('2d');
+    const grad = cx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,200,1)');
+    grad.addColorStop(0.2, 'rgba(255,255,200,0.5)');
+    grad.addColorStop(1, 'rgba(255,255,200,0)');
+    cx.fillStyle = grad;
+    cx.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  })(),
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+for (let i = 0; i < 15; i++) {
+  const sparkle = new THREE.Sprite(sparkleMat);
+  sparkle.position.set(
+    (Math.random() - 0.5) * 10,
+    Math.random() * 3 + 0.5,
+    (Math.random() - 0.5) * 8
+  );
+  sparkle.scale.setScalar(Math.random() * 0.08 + 0.02);
+  scene.add(sparkle);
+
+  // Animate
+  setInterval(() => {
+    sparkle.scale.setScalar(Math.random() * 0.08 + 0.02);
+  }, 2000 + Math.random() * 3000);
+}
+
+// ═══════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════
+let clock = new THREE.Clock();
+
+function animate() {
+  const delta = clock.getDelta();
+
+  controls.update();
+  updateCharacterAnimations(delta);
+
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+// ═══════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+});
+
+// ═══════════════════════════════════════
+// WELCOME
+// ═══════════════════════════════════════
+updateStatus('🤖 等待任务中...');
+drawBoard([]);
+boardTexture.needsUpdate = true;
+
+console.log('🏢 3D 智能办公室已就绪！');
+console.log('💡 在下方输入框下达任务，看 AI 如何拆解执行～');
+
+</script>
+</body>
+</html>
