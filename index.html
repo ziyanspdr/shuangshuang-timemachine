@@ -163,10 +163,10 @@ section:first-of-type { padding-top: 9rem; }
 .moment-composer .composer-avatar {
   width: 44px; height: 44px; border-radius: 50%;
   background: linear-gradient(135deg, var(--blush), var(--rose));
-  font-size: 1.3rem; overflow: hidden; flex-shrink: 0; line-height: 44px;
+  flex-shrink: 0; overflow: hidden; position: relative;
 }
 .moment-composer .composer-avatar img { display: block; width: 44px; height: 44px; object-fit: cover; border-radius: 50%; }
-.moment-composer .composer-avatar span { display: inline-block; width: 44px; height: 44px; line-height: 44px; text-align: center; border-radius: 50%; }
+.moment-composer .composer-avatar span { display: block; width: 44px; height: 44px; line-height: 44px; text-align: center; border-radius: 50%; }
 .moment-composer textarea {
   width: 100%; padding: 1rem 1.2rem; border: 2px solid rgba(232,160,160,0.15);
   border-radius: var(--radius-sm); font-size: 0.95rem; font-family: inherit;
@@ -190,10 +190,10 @@ section:first-of-type { padding-top: 9rem; }
 .moment-card .moment-avatar {
   width: 44px; height: 44px; border-radius: 50%;
   background: linear-gradient(135deg, var(--blush), var(--rose));
-  font-size: 1.4rem; flex-shrink: 0; overflow: hidden; line-height: 44px;
+  flex-shrink: 0; overflow: hidden; position: relative;
 }
 .moment-card .moment-avatar img { display: block; width: 44px; height: 44px; object-fit: cover; border-radius: 50%; }
-.moment-card .moment-avatar span { display: inline-block; width: 44px; height: 44px; line-height: 44px; text-align: center; border-radius: 50%; }
+.moment-card .moment-avatar .ma-span { display: block; width: 44px; height: 44px; line-height: 44px; text-align: center; border-radius: 50%; font-size: 1.4rem; }
 .moment-card .moment-user { font-weight: bold; font-size: 0.95rem; color: var(--deep); }
 .moment-card .moment-time { font-size: 0.75rem; color: #BBA5A5; }
 .moment-card .moment-text { font-size: 0.95rem; color: #5C4B51; line-height: 1.8; margin-bottom: 0.8rem; white-space: pre-wrap; }
@@ -604,7 +604,7 @@ setTimeout(updateTotalMemories,200);
 // ═══════════════════════════════
 // GALLERY
 // ═══════════════════════════════
-var galleryImages=[{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/1.jpg',caption:'晨光微曦'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/2.jpg',caption:'花开半夏'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/3.jpg',caption:'街角咖啡'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/4.jpg',caption:'海风轻拂'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/5.jpg',caption:'落日余晖'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/6.jpg',caption:'慵懒午后'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/7.jpg',caption:'雨后初晴'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/8.jpg',caption:'秋叶私语'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/9.jpg',caption:'城市微光'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/10.jpg',caption:'星河入梦'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/11.jpg',caption:'微风与你'},{src:'https://ghproxy.net/https://raw.githubusercontent.com/ziyanspdr/shuangshuang-timemachine/master/photos/12.jpg',caption:'时光定格'}];
+var galleryImages=[{src:'photos/1.jpg',caption:'晨光微曦'},{src:'photos/2.jpg',caption:'花开半夏'},{src:'photos/3.jpg',caption:'街角咖啡'},{src:'photos/4.jpg',caption:'海风轻拂'},{src:'photos/5.jpg',caption:'落日余晖'},{src:'photos/6.jpg',caption:'慵懒午后'},{src:'photos/7.jpg',caption:'雨后初晴'},{src:'photos/8.jpg',caption:'秋叶私语'},{src:'photos/9.jpg',caption:'城市微光'},{src:'photos/10.jpg',caption:'星河入梦'},{src:'photos/11.jpg',caption:'微风与你'},{src:'photos/12.jpg',caption:'时光定格'}];
 (function(){var grid=document.getElementById('galleryGrid');galleryImages.forEach(function(img,i){var item=document.createElement('div');item.className='gallery-item';item.innerHTML='<img src="'+img.src+'" alt="'+img.caption+'" loading="lazy"><div class="overlay"><span>'+img.caption+'</span></div>';item.onclick=function(){openGalleryLightbox(i)};grid.appendChild(item)})})();
 
 // ═══════════════════════════════
@@ -645,9 +645,9 @@ function deleteMoment(idx){if(!confirm('确定删除这条动态吗？'))return;
 function buildMomentAvatarHTML() {
   var savedAvatar = localStorage.getItem('shuangshuang_avatar');
   if (savedAvatar) {
-    return '<div class="moment-avatar"><img src="' + savedAvatar + '" alt="双双"></div>';
+    return '<div class="moment-avatar"><img src="' + savedAvatar + '" alt="双双" onerror="this.style.display=\'none\';this.parentNode.querySelector(\'.ma-span\').style.display=\'block\'"><span class="ma-span" style="display:none">' + moods[currentMood].avatar + '</span></div>';
   }
-  return '<div class="moment-avatar"><span>' + moods[currentMood].avatar + '</span></div>';
+  return '<div class="moment-avatar"><span class="ma-span">' + moods[currentMood].avatar + '</span></div>';
 }
 
 function renderMoments(){
