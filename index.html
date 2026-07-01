@@ -763,7 +763,7 @@ function initMQTT() {
   }
   try {
     showSyncStatus('connecting');
-    _mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+    _mqttClient = mqtt.connect('wss://broker-cn.emqx.io:8084/mqtt', {
       clientId: 'sstw_' + Math.random().toString(36).substring(2, 10),
       clean: true,
       connectTimeout: 10000,
@@ -832,4 +832,4 @@ console.log('💡 点击首页大头像即可上传自己的头像照片，全�
 </script>
 
 
-<yd-mg-icon style="position: fixed; z-index: 2147483647;"></yd-mg-icon><yd-mg-block-icon></yd-mg-block-icon><yd-image-ocr style="z-index: 2147483647;"></yd-image-ocr><div style="position:fixed;bottom:0;left:0;right:0;text-align:center;padding:8px;z-index:999;background:rgba(255,248,240,0.9);backdrop-filter:blur(10px);border-top:1px solid rgba(232,160,160,0.1);display:flex;gap:10px;justify-content:center;"><a href="3D%E5%AE%B6.html" style="display:inline-block;padding:7px 18px;background:linear-gradient(135deg,#f5a97f,#e8877a);border-radius:18px;color:#fff;text-decoration:none;font-size:.8rem;font-weight:bold;">🏠 3D三室一厅</a></div></body></html>
+<yd-mg-icon style="position: fixed; z-index: 2147483647;"></yd-mg-icon><yd-mg-block-icon></yd-mg-block-icon><yd-image-ocr style="z-index: 2147483647;"></yd-image-ocr></body></html>
